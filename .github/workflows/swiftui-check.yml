@@ -27,7 +27,7 @@ jobs:
       
       - name: Generate scan report (JSON)
         run: |
-          swiftui-migrate scan examples/ --json > scan-results.json
+          swiftui-migrate scan examples/ --json --no-fail > scan-results.json
       
       - name: Extract metrics
         id: metrics
