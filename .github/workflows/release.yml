@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine hatchling
+      
+      - name: Build package
+        run: python -m build
+      
+      - name: Check package
+        run: twine check dist/*
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package
+          path: dist/
+      
+      - name: Install package from wheel
+        run: |
+          pip install dist/*.whl
+      
+      - name: Test CLI
+        run: |
+          swiftui-migrate --version
+          swiftui-migrate rules
+      
+      - name: Run scan test
+        run: |
+          swiftui-migrate scan examples/ --json --no-fail > test-scan.json
+          cat test-scan.json
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      id-token: write
+    
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package
+          path: dist/
+      
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  release:
+    runs-on: ubuntu-latest
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package
+          path: dist/
+      
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Generate release notes
+        run: |
+          swiftui-migrate scan examples/ --json --no-fail > scan-results.json || true
+          
+          cat > release-notes.md << 'EOF'
+          ## SwiftUI Migrate v${{ steps.version.outputs.VERSION }}
+          
+          ### Installation
+          
+          ```bash
+          pip install swiftui-migrate
+          ```
+          
+          ### Usage
+          
+          ```bash
+          # Scan a directory
+          swiftui-migrate scan /path/to/swift/code
+          
+          # Generate JSON report
+          swiftui-migrate scan /path/to/swift/code --json > report.json
+          
+          # List all detection rules
+          swiftui-migrate rules
+          ```
+          
+          ### What's Included
+          
+          - Detects deprecated SwiftUI APIs across iOS 14-17+
+          - Identifies fragile patterns that may cause issues
+          - Provides migration suggestions with minimum iOS version requirements
+          - JSON output for CI/CD integration
+          - Inline code annotation support
+          
+          ### Example Detection
+          
+          The tool can detect issues like:
+          - `NavigationView` (deprecated in iOS 16+)
+          - `@Environment(\.presentationMode)` (deprecated in iOS 15+)
+          - `.navigationBarItems()` (deprecated in iOS 14+)
+          - Fragile navigation patterns with `isActive:`
+          - And many more...
+          
+          See the full list with `swiftui-migrate rules`
+          EOF
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
