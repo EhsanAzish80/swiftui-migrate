@@ -177,12 +177,12 @@ def display_text_format(findings: List, group_by: str, files_scanned: int):
         fragile = [f for f in findings if f.rule.category == "fragile"]
         
         if deprecated:
-            console.print("\n[bold]Deprecated APIs[/bold]")
+            console.print("\n[bold red]Deprecated APIs[/bold red]")
             console.print("[dim]" + "─" * 60 + "[/dim]")
             _display_findings_by_file(deprecated)
         
         if fragile:
-            console.print("\n[bold]Fragile Patterns[/bold]")
+            console.print("\n[bold yellow]Fragile Patterns[/bold yellow]")
             console.print("[dim]" + "─" * 60 + "[/dim]")
             _display_findings_by_file(fragile)
     
@@ -194,12 +194,14 @@ def display_text_format(findings: List, group_by: str, files_scanned: int):
         for rule_id, rule_findings in grouped.items():
             rule = rule_findings[0].rule
             
-            console.print(f"\n[bold]{rule_id}[/bold] {rule.name}")
+            # Color based on category
+            color = "red" if rule.category == "deprecated" else "yellow"
+            console.print(f"\n[bold {color}]{rule_id}[/bold {color}] {rule.name}")
             console.print(f"  {rule.message}")
             if rule.suggestion:
-                console.print(f"  Suggestion: {rule.suggestion}")
+                console.print(f"  [cyan]Suggestion:[/cyan] {rule.suggestion}")
                 if rule.min_ios_version:
-                    console.print(f"  (Requires {rule.min_ios_version}+)")
+                    console.print(f"  [dim](Requires {rule.min_ios_version}+)[/dim]")
             
             console.print(f"  Found in {len(rule_findings)} location(s):")
             for finding in rule_findings:
@@ -209,12 +211,13 @@ def display_text_format(findings: List, group_by: str, files_scanned: int):
 
     else:  # none
         for finding in findings:
+            color = "red" if finding.rule.category == "deprecated" else "yellow"
             console.print(
-                f"{finding.file_path}:{finding.line_number}:{finding.column} "
+                f"[{color}]{finding.file_path}:{finding.line_number}:{finding.column}[/{color}] "
                 f"{finding.rule.id}: {finding.rule.message}"
             )
             if finding.rule.suggestion:
-                console.print(f"  Suggestion: {finding.rule.suggestion}")
+                console.print(f"  [cyan]Suggestion:[/cyan] {finding.rule.suggestion}")
 
     # Summary section
     _display_summary(findings, files_scanned)
@@ -224,17 +227,19 @@ def _display_findings_by_file(findings: List):
     """Helper to display findings grouped by file."""
     grouped = group_findings_by_file(findings)
     for file_path, file_findings in grouped.items():
-        console.print(f"\n{file_path}")
+        console.print(f"\n[bold]{file_path}[/bold]")
         for finding in file_findings:
+            # Color based on category
+            color = "red" if finding.rule.category == "deprecated" else "yellow"
             console.print(
-                f"  {finding.line_number}:{finding.column} "
-                f"{finding.rule.id}: {finding.rule.message}"
+                f"  [{color}]{finding.line_number}:{finding.column} "
+                f"{finding.rule.id}:[/{color}] {finding.rule.message}"
             )
             console.print(f"  [dim]{finding.line_content.strip()}[/dim]")
             if finding.rule.suggestion:
-                console.print(f"  Suggestion: {finding.rule.suggestion}")
+                console.print(f"  [cyan]Suggestion:[/cyan] {finding.rule.suggestion}")
                 if finding.rule.min_ios_version:
-                    console.print(f"  (Requires {finding.rule.min_ios_version}+)")
+                    console.print(f"  [dim](Requires {finding.rule.min_ios_version}+)[/dim]")
 
 
 def _display_summary(findings: List, files_scanned: int):
@@ -247,8 +252,14 @@ def _display_summary(findings: List, files_scanned: int):
     console.print("─" * 60)
     console.print(f"Files scanned:    {files_scanned}")
     console.print(f"Total issues:     {len(findings)}")
-    console.print(f"  Deprecated:     {deprecated_count}")
-    console.print(f"  Fragile:        {fragile_count}")
+    if deprecated_count > 0:
+        console.print(f"  [red]Deprecated:[/red]     {deprecated_count}")
+    else:
+        console.print(f"  Deprecated:     {deprecated_count}")
+    if fragile_count > 0:
+        console.print(f"  [yellow]Fragile:[/yellow]        {fragile_count}")
+    else:
+        console.print(f"  Fragile:        {fragile_count}")
     console.print("─" * 60)
 
 

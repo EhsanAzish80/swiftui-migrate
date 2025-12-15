@@ -98,7 +98,10 @@ class SwiftScanner:
 
         all_findings = []
 
-        for swift_file in directory.rglob("*.swift"):
+        # Sort files for deterministic output
+        swift_files = sorted(directory.rglob("*.swift"))
+        
+        for swift_file in swift_files:
             # Skip excluded directories
             if any(excluded in swift_file.parts for excluded in exclude_patterns):
                 continue
@@ -106,6 +109,9 @@ class SwiftScanner:
             findings = self.scan_file(swift_file)
             all_findings.extend(findings)
 
+        # Sort findings for deterministic output (by file, then line, then column)
+        all_findings.sort(key=lambda f: (str(f.file_path), f.line_number, f.column))
+        
         return all_findings
 
     def scan_paths(self, paths: List[Path]) -> List[Finding]:
@@ -124,11 +130,16 @@ class SwiftScanner:
 def group_findings_by_file(findings: List[Finding]) -> dict[Path, List[Finding]]:
     """Group findings by file path."""
     grouped = {}
-    for finding in findings:
+    # Sort findings for deterministic ordering
+    sorted_findings = sorted(findings, key=lambda f: (str(f.file_path), f.line_number, f.column))
+    
+    for finding in sorted_findings:
         if finding.file_path not in grouped:
             grouped[finding.file_path] = []
         grouped[finding.file_path].append(finding)
-    return grouped
+    
+    # Return dict with sorted keys
+    return {k: grouped[k] for k in sorted(grouped.keys(), key=str)}
 
 
 def group_findings_by_rule(findings: List[Finding]) -> dict[str, List[Finding]]:
@@ -139,4 +150,6 @@ def group_findings_by_rule(findings: List[Finding]) -> dict[str, List[Finding]]:
         if rule_id not in grouped:
             grouped[rule_id] = []
         grouped[rule_id].append(finding)
-    return grouped
+    
+    # Return dict with sorted keys
+    return {k: grouped[k] for k in sorted(grouped.keys())}

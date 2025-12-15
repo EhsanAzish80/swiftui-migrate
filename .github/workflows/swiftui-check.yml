@@ -1,0 +1,56 @@
+name: SwiftUI Check
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  swiftui-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install swiftui-migrate
+        run: pip install click rich
+      
+      - name: Generate scan report (JSON)
+        run: |
+          python -m swiftui_migrate.cli scan Sources/ --json > scan-results.json
+      
+      - name: Extract metrics
+        id: metrics
+        run: |
+          echo "total=$(jq '.summary.total' scan-results.json)" >> $GITHUB_OUTPUT
+          echo "deprecated=$(jq '.summary.deprecated' scan-results.json)" >> $GITHUB_OUTPUT
+          echo "fragile=$(jq '.summary.fragile' scan-results.json)" >> $GITHUB_OUTPUT
+      
+      - name: Add job summary
+        run: |
+          echo "### SwiftUI Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Files scanned: ${{ steps.metrics.outputs.files_scanned }}" >> $GITHUB_STEP_SUMMARY
+          echo "Total issues: ${{ steps.metrics.outputs.total }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Deprecated APIs: ${{ steps.metrics.outputs.deprecated }} ❌" >> $GITHUB_STEP_SUMMARY
+          echo "- Fragile patterns: ${{ steps.metrics.outputs.fragile }} ⚠️" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: swiftui-scan-results
+          path: scan-results.json
+      
+      - name: Check for deprecated APIs
+        run: |
+          # This step fails if deprecated APIs are found
+          # Fragile patterns won't fail CI (warnings only)
+          python -m swiftui_migrate.cli scan Sources/

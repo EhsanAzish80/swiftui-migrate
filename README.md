@@ -1,417 +1,326 @@
-# SwiftUI Migrate
+# swiftui-migrate
 
-A Python CLI tool that scans Swift/SwiftUI codebases and reports deprecated or fragile SwiftUI API usage to help developers migrate across iOS versions.
+A straightforward Python CLI tool that scans Swift/SwiftUI code for deprecated APIs and common pitfalls.
 
-## Problem Statement
+## Why This Exists
 
-SwiftUI evolves rapidly with each iOS release. APIs get deprecated, new best practices emerge, and code that worked perfectly in iOS 15 may trigger warnings or crashes in iOS 17. Manually tracking these changes across large codebases is time-consuming and error-prone.
+SwiftUI changes fast. Apple deprecates APIs, introduces new patterns, and existing code that worked fine in iOS 15 might cause issues in iOS 17. Manually tracking these changes across a codebase is tedious.
 
-**SwiftUI Migrate** helps you:
-- 🔍 Identify deprecated SwiftUI APIs before they break
-- ⚠️ Detect fragile patterns that may cause issues
-- 📊 Get a clear migration roadmap for your codebase
-- 🚀 Integrate seamlessly into CI/CD pipelines
+This tool does the boring work: it scans your Swift files with regex patterns and tells you what's deprecated or likely to break.
+
+That's it. No magic, no AI, no code rewriting (yet).
 
 ## What It Does
 
-✅ **Does:**
-- Recursively scans `.swift` files in your project
-- Detects **deprecated SwiftUI APIs** (e.g., `NavigationView`, `navigationBarItems`)
-- Identifies **fragile patterns** that break or behave inconsistently (e.g., `NavigationLink` with `isActive`)
-- Provides line-by-line reports with actionable suggestions
-- Explains *why* patterns are problematic with behavioral notes
-- Supports multiple output formats (text, summary, JSON)
-- Zero runtime dependencies on Swift compiler or Xcode
-- Fast, read-only scanning suitable for CI environments
+**Scans for two categories of issues:**
 
-✅ **Detects two categories:**
-- **Deprecated APIs**: Officially deprecated by Apple (fails CI by default)
-- **Fragile Patterns**: Known to cause issues but not deprecated (warnings only)
+1. **Deprecated APIs** - Officially deprecated by Apple
+   - `NavigationView` (iOS 16+)
+   - `@Environment(\.presentationMode)` (iOS 15+)
+   - `navigationBarTitle` (iOS 14+)
+   - `navigationBarItems` (iOS 14+)
+   - `edgesIgnoringSafeArea` (iOS 14+)
 
-❌ **Does NOT:**
-- Perform AST parsing or deep semantic analysis (v1)
-- Automatically rewrite or refactor code
-- Require Swift compilation or project builds
-- Modify your source files in any way
+2. **Fragile Patterns** - Not deprecated, but known to break
+   - `NavigationLink(isActive:)` - breaks with NavigationStack
+   - Bool-driven navigation bindings - causes state issues
+   - `.onAppear` in list rows - triggers on every scroll
+   - `GeometryReader` in scroll views - layout loops
+   - `@ObservedObject` in root views - premature deallocation
+
+**For each issue:**
+- Shows file location (`file.swift:line:column`)
+- Explains what's wrong
+- Suggests how to fix it
+- Notes minimum iOS version for the fix
+
+## What It Does NOT Do
+
+- ❌ Parse Swift AST (uses regex patterns)
+- ❌ Understand your app's logic or architecture
+- ❌ Modify your code (read-only scanning)
+- ❌ Catch every possible SwiftUI issue
+- ❌ Replace code review or testing
+- ❌ Guarantee migration correctness
+
+This is a pattern matcher, not a compiler. It will miss some issues and occasionally flag false positives.
 
 ## Installation
 
 **Requirements:**
-- Python 3.10 or higher
+- Python 3.10+
+- No Swift compiler needed
+- No Xcode required
 
-**Install from source:**
 ```bash
-git clone https://github.com/yourusername/swiftui-migrate.git
+# From source
+git clone <repository-url>
 cd swiftui-migrate
 pip install -e .
 ```
 
-**Or install dependencies directly:**
+**Or install dependencies:**
 ```bash
 pip install click rich
 ```
 
 ## Usage
 
-### Basic Commands
+### Basic Scan
 
-Scan a single file or directory:
 ```bash
-swiftui-migrate scan /path/to/your/project
-```
+# Scan a file
+swiftui-migrate scan MyView.swift
 
-Scan multiple paths:
-```bash
-swiftui-migrate scan ./Sources ./Tests
+# Scan a directory
+swiftui-migrate scan Sources/
+
+# Scan with exclusions
+swiftui-migrate scan . --exclude Pods --exclude Build
 ```
 
 ### Output Modes
 
-**Human-readable (default)**:
+**Human-readable (default):**
 ```bash
-swiftui-migrate scan ./Sources
+swiftui-migrate scan Sources/
 ```
 
-**JSON for CI/CD**:
+**JSON for CI:**
 ```bash
-swiftui-migrate scan ./Sources --json
-```
-
-Example JSON output:
-```json
-{
-  "version": "0.1.0",
-  "files_scanned": 42,
-  "summary": {
-    "total": 15,
-    "deprecated": 10,
-    "fragile": 5
-  },
-  "findings": [...]
-}
+swiftui-migrate scan Sources/ --json
 ```
 
 ### Filtering
 
-**By iOS version** (focus on specific migrations):
 ```bash
-# Only show iOS 16+ issues
-swiftui-migrate scan ./Sources --min-ios 16
+# Only iOS 16+ issues
+swiftui-migrate scan Sources/ --min-ios 16
 
-# Only show iOS 17+ issues
-swiftui-migrate scan ./Sources --min-ios 17
+# Only deprecated APIs
+swiftui-migrate scan Sources/ --category deprecated
+
+# Only fragile patterns
+swiftui-migrate scan Sources/ --category fragile
 ```
 
-**By category** (deprecated vs fragile):
+### Grouping
+
 ```bash
-# Only deprecated APIs (hard blockers)
-swiftui-migrate scan ./Sources --category deprecated
+# Group by file (default)
+swiftui-migrate scan Sources/
 
-# Only fragile patterns (warnings)
-swiftui-migrate scan ./Sources --category fragile
-```
+# Group by rule type
+swiftui-migrate scan Sources/ --group-by rule
 
-**By severity**:
-```bash
-swiftui-migrate scan ./Sources --severity error
-swiftui-migrate scan ./Sources --severity warning
-```
-
-### Grouping Options
-
-Group results by file (default), rule, or category:
-```bash
-swiftui-migrate scan ./Sources --group-by file
-swiftui-migrate scan ./Sources --group-by rule
-swiftui-migrate scan ./Sources --group-by category
-swiftui-migrate scan ./Sources --group-by none
-```
-
-### Advanced Options
-
-**Fail CI on fragile patterns** (optional strict mode):
-```bash
-# By default, only deprecated APIs fail CI
-swiftui-migrate scan ./Sources --fail-on-fragile
-```
-
-**Exclude directories**:
-```bash
-swiftui-migrate scan ./Sources --exclude Pods --exclude DerivedData
-```
-
-### List Available Rules
-
-View all detection rules:
-```bash
-swiftui-migrate rules
+# Group by category (deprecated vs fragile)
+swiftui-migrate scan Sources/ --group-by category
 ```
 
 ## Example Output
 
-### Human-Readable (Default)
 ```
 swiftui-migrate v0.1.0
 
-/Users/dev/MyApp/Sources/ContentView.swift
-  4:4 ENV001: @Environment(\.presentationMode) is deprecated in iOS 15+.
-  @Environment(\.presentationMode) var presentationMode
-  Suggestion: Replace with @Environment(\.dismiss) and call dismiss() directly
-  (Requires iOS 15.0+)
-
-  7:8 NAV001: NavigationView is deprecated in iOS 16+.
+Sources/HomeView.swift
+  15:8 NAV001: NavigationView is deprecated in iOS 16+.
   NavigationView {
   Suggestion: Replace with NavigationStack for simple navigation
+  (Requires iOS 16.0+)
+
+  42:12 FRAG001: NavigationLink with isActive: can cause issues
+  NavigationLink(destination: DetailView(), isActive: $show) {
+  Suggestion: Use NavigationStack with navigationDestination
   (Requires iOS 16.0+)
 
 ────────────────────────────────────────────────────────────
 Summary
 ────────────────────────────────────────────────────────────
-Files scanned:    1
-Total issues:     6
-  Deprecated:     6
-  Fragile:        0
+Files scanned:    12
+Total issues:     8
+  Deprecated:     5
+  Fragile:        3
 ────────────────────────────────────────────────────────────
 ```
 
-### JSON Mode
-```json
-{
-  "version": "0.1.0",
-  "files_scanned": 1,
-  "summary": {
-    "total": 6,
-    "deprecated": 6,
-    "fragile": 0
-  },
-  "findings": [
-    {
-      "rule_id": "NAV001",
-      "rule_name": "NavigationView deprecated",
-      "file_path": "/Users/dev/MyApp/Sources/ContentView.swift",
-      "line_number": 7,
-      "column": 8,
-      "matched_snippet": "NavigationView {",
-      "message": "NavigationView is deprecated in iOS 16+.",
-      "severity": "warning",
-      "deprecated_in": "iOS 16",
-      "migration_suggestion": "Replace with NavigationStack...",
-      "minimum_ios_version": "iOS 16.0",
-      "category": "deprecated"
-    }
-  ]
-}
-```
-
-## Detection Rules
-
-### Deprecated APIs (Fail CI by Default)
-
-**V1 High-Confidence Migration Rules:**
-
-The rule engine focuses on detecting deprecated APIs with clear migration paths:
-
-| Rule ID | Deprecated API | Replacement | Min iOS |
-|---------|---------------|-------------|---------|
-| `NAV001` | `NavigationView` | `NavigationStack` or `NavigationSplitView` | iOS 16.0 |
-| `ENV001` | `@Environment(\.presentationMode)` | `@Environment(\.dismiss)` | iOS 15.0 |
-| `MOD001` | `.navigationBarTitle(_:displayMode:)` | `.navigationTitle(_:)` + `.navigationBarTitleDisplayMode(_:)` | iOS 14.0 |
-| `MOD002` | `.navigationBarItems(leading:trailing:)` | `.toolbar { ToolbarItem(...) }` | iOS 14.0 |
-| `MOD003` | `.edgesIgnoringSafeArea(_:)` | `.ignoresSafeArea(_:edges:)` | iOS 14.0 |
-
-### Fragile Patterns (Warnings Only)
-
-**Patterns that aren't deprecated but cause issues:**
-
-| Rule ID | Fragile Pattern | Why Problematic | Modern Alternative |
-|---------|----------------|-----------------|-------------------|
-| `FRAG001` | `NavigationLink(isActive:)` | Breaks with NavigationStack, state desync | Value-based navigation |
-| `FRAG002` | Bool-driven navigation | Doesn't compose with NavigationPath | NavigationPath |
-| `FRAG003` | `.onAppear` in list rows | Fires on every scroll, redundant loads | `.task()` on parent view |
-| `FRAG004` | `GeometryReader` in ScrollView | Layout loops, jittery scrolling | `.visualEffect` or `.containerRelativeFrame` |
-| `FRAG005` | `@ObservedObject` in App struct | Premature deallocation | `@StateObject` |
-
-**Important:** Fragile patterns don't fail CI by default. Use `--fail-on-fragile` to enforce.
-
-See [docs/FRAGILE_PATTERNS.md](docs/FRAGILE_PATTERNS.md) for detailed explanations.
-
-### Finding Structure
-
-Each finding includes:
-- **Rule ID**: Unique identifier
-- **File path & line number**: Exact location
-- **Matched snippet**: The problematic code
-- **Migration suggestion**: How to fix it
-- **Minimum iOS version**: Required for the replacement API
-- **Category**: "deprecated" or "fragile"
-- **Behavioral note**: (Fragile patterns only) Why it causes issues
-
-Run `swiftui-migrate rules` for detailed descriptions.
-
-## Programmatic Usage
-
-Use swiftui-migrate as a library in your own Python tools:
-
-```python
-from pathlib import Path
-from swiftui_migrate.scanner import SwiftScanner
-
-# Initialize scanner
-scanner = SwiftScanner()
-
-# Scan files
-findings = scanner.scan_file(Path("MyView.swift"))
-
-# Get structured results
-for finding in findings:
-    result = finding.to_dict()
-    print(f"{result['rule_id']}: {result['migration_suggestion']}")
-    print(f"  Min iOS: {result['minimum_ios_version']}")
-```
-
-Each `Finding` object includes:
-- `rule_id`: Unique rule identifier
-- `rule_name`: Human-readable name
-- `file_path`: Absolute path to file
-- `line_number`: Line where issue occurs
-- `column`: Column position
-- `matched_snippet`: The problematic code
-- `message`: Issue description
-- `severity`: "warning" or "error"
-- `deprecated_in`: iOS version where deprecated
-- `migration_suggestion`: How to fix it
-- `minimum_ios_version`: Required iOS for replacement
-
-See [examples/usage_example.py](examples/usage_example.py) for complete examples.
-
-## CI/CD Integration
+## CI Integration
 
 ### Exit Codes
 
-| Scenario | Exit Code | Behavior |
-|----------|-----------|----------|
-| No issues found | 0 | ✅ Pass |
-| Only fragile patterns | 0 | ✅ Pass (warnings only) |
-| Deprecated APIs found | 1 | ❌ Fail |
-| Both found | 1 | ❌ Fail (due to deprecated) |
-| With `--fail-on-fragile` | 1 | ❌ Fail on any issue |
+**By default:**
+- Deprecated APIs → exit 1 (fails CI)
+- Fragile patterns → exit 0 (warnings only)
 
-**Default behavior:** Deprecated APIs fail CI, fragile patterns don't.
+**Strict mode:**
+```bash
+swiftui-migrate scan Sources/ --fail-on-fragile
+```
+Everything fails CI.
 
 ### GitHub Actions
 
-**Basic integration**:
+**.github/workflows/swiftui-check.yml:**
 ```yaml
-- name: Check SwiftUI API usage
-  run: |
-    pip install swiftui-migrate
-    swiftui-migrate scan ./Sources
-    # Only fails if deprecated APIs found
+name: SwiftUI Check
+
+on: [pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install swiftui-migrate
+        run: |
+          pip install click rich
+          # Or: pip install swiftui-migrate
+      
+      - name: Scan for deprecated APIs
+        run: |
+          python -m swiftui_migrate.cli scan Sources/ --json > results.json
+          
+          # Check results
+          DEPRECATED=$(jq '.summary.deprecated' results.json)
+          FRAGILE=$(jq '.summary.fragile' results.json)
+          
+          echo "Found $DEPRECATED deprecated APIs"
+          echo "Found $FRAGILE fragile patterns"
+          
+          # Fail on deprecated only (default behavior)
+          swiftui-migrate scan Sources/
+      
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: scan-results
+          path: results.json
 ```
 
-**With JSON output**:
+**Simpler version:**
 ```yaml
-- name: Scan SwiftUI code
+- name: Check SwiftUI code
   run: |
-    swiftui-migrate scan ./Sources --json > results.json
-    
-- name: Check for deprecated APIs
-  run: |
-    DEPRECATED=$(jq '.summary.deprecated' results.json)
-    if [ "$DEPRECATED" -gt 0 ]; then
-      echo "Found $DEPRECATED deprecated APIs"
-      exit 1
-    fi
-```
-
-**Strict mode** (fail on fragile patterns too):
-```yaml
-- name: SwiftUI strict check
-  run: swiftui-migrate scan ./Sources --fail-on-fragile
+    pip install click rich
+    swiftui-migrate scan Sources/
 ```
 
 ### GitLab CI
 
+**.gitlab-ci.yml:**
 ```yaml
 swiftui-check:
+  image: python:3.10
   script:
-    - pip install swiftui-migrate
-    - swiftui-migrate scan ./Sources --json > report.json
+    - pip install click rich
+    - swiftui-migrate scan Sources/ --json > report.json
   artifacts:
-    reports:
-      codequality: report.json
+    paths:
+      - report.json
 ```
 
-## Project Structure
+## Performance
 
-```
-swiftui-migrate/
-├── src/
-│   └── swiftui_migrate/
-│       ├── __init__.py       # Package initialization
-│       ├── __main__.py       # Entry point for python -m
-│       ├── cli.py            # CLI interface (Click + Rich)
-│       ├── scanner.py        # Core scanning logic
-│       └── rules.py          # Rule definitions
-├── tests/
-│   └── __init__.py
-├── pyproject.toml            # Project configuration
-├── README.md                 # This file
-└── .gitignore
-```
+**Expected:**
+- ~1000 files/second on typical hardware
+- Scales linearly with file count
+- No compilation required
 
-## Development
+**Limitations:**
+- Large codebases (10k+ files) may take a minute
+- Network filesystems will be slower
 
-**Install in development mode:**
-```bash
-pip install -e ".[dev]"
-```
+## Detection Rules
 
-**Run tests:**
-```bash
-pytest
-```
+| Rule | Name | iOS | Category |
+|------|------|-----|----------|
+| NAV001 | NavigationView deprecated | 16 | Deprecated |
+| ENV001 | presentationMode deprecated | 15 | Deprecated |
+| MOD001 | navigationBarTitle deprecated | 14 | Deprecated |
+| MOD002 | navigationBarItems deprecated | 14 | Deprecated |
+| MOD003 | edgesIgnoringSafeArea deprecated | 14 | Deprecated |
+| FRAG001 | NavigationLink isActive | 16 | Fragile |
+| FRAG002 | Bool-driven navigation | 16 | Fragile |
+| FRAG003 | onAppear in row views | 15 | Fragile |
+| FRAG004 | GeometryReader in scrolls | 17 | Fragile |
+| FRAG005 | ObservedObject in root | 14 | Fragile |
 
-**Format code:**
-```bash
-black src/ tests/
-ruff check src/ tests/
-```
+Run `swiftui-migrate rules` to see all rules.
 
-## Limitations (v1)
+## Limitations
 
-- **Text-based scanning only**: Uses regex patterns, not full Swift AST parsing
-- **No semantic analysis**: May miss context-dependent issues or produce false positives
-- **No auto-refactoring**: Reports issues only; manual fixes required
-- **Pattern matching**: Can't detect complex logic flows or multi-line patterns
+**This tool:**
+- Uses regex, not a Swift parser
+- Can't understand context or app architecture
+- May flag valid code as problematic
+- May miss complex patterns
+- Won't catch all SwiftUI issues
+- Doesn't understand conditional compilation
+- Can't detect runtime-only issues
 
-Future versions may add AST parsing using Swift's libSyntax or similar tools.
+**It's a starting point, not a complete solution.**
 
 ## Roadmap
 
-- [ ] v0.2: Custom rule configuration via YAML/TOML
-- [ ] v0.3: HTML report generation
-- [ ] v0.4: AST-based parsing for higher accuracy
-- [ ] v1.0: Auto-fix suggestions (safe refactorings)
+**v1.0 (current):**
+- ✅ Pattern-based scanning
+- ✅ Deprecated API detection
+- ✅ Fragile pattern detection
+- ✅ CI integration
+
+**Future (maybe):**
+- [ ] Auto-refactoring (opt-in, with preview)
+- [ ] Swift AST parsing for accuracy
+- [ ] Custom rule definitions
+- [ ] Plugin system
+- [ ] IDE integrations
+
+Auto-refactoring will be:
+1. Opt-in only
+2. Requires explicit confirmation
+3. Creates backups first
+4. Shows diffs before applying
+
+**No automated rewrites without user consent.**
+
+## Philosophy
+
+**This tool should be:**
+- Boring (predictable, reliable)
+- Honest (doesn't claim to be more than it is)
+- Helpful (finds real issues)
+- Fast (CI-friendly)
+- Safe (read-only)
+
+**It should not be:**
+- Clever (no surprises)
+- Magical (no hidden behavior)
+- Intrusive (no code modification)
+- Overly confident (flags issues, you decide)
 
 ## Contributing
 
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new rules or features
-4. Submit a pull request
+Found a deprecated API this doesn't catch? Open an issue with:
+- The API pattern
+- iOS version where deprecated
+- Suggested replacement
+
+False positives? Also open an issue with:
+- The code that was flagged
+- Why it's actually fine
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT
 
 ## Credits
 
-Built with:
-- [Click](https://click.palletsprojects.com/) - CLI framework
-- [Rich](https://rich.readthedocs.io/) - Terminal formatting
+Built because migrating SwiftUI code is tedious and error-prone. This tool does the grep work so you don't have to.
 
----
-
-**Built for developers, by developers.** Help make SwiftUI migrations painless.
+No AI was harmed (or used) in the making of this tool.
