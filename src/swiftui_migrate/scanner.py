@@ -25,11 +25,34 @@ class Finding:
             f"[{self.rule.severity.upper()}] {self.rule.id}: {self.rule.message}"
         )
 
+    def to_dict(self) -> dict:
+        """Convert finding to structured dictionary."""
+        result = {
+            "rule_id": self.rule.id,
+            "rule_name": self.rule.name,
+            "file_path": str(self.file_path),
+            "line_number": self.line_number,
+            "column": self.column,
+            "matched_snippet": self.line_content.strip(),
+            "message": self.rule.message,
+            "severity": self.rule.severity,
+            "deprecated_in": self.rule.ios_version,
+            "migration_suggestion": self.rule.suggestion,
+            "minimum_ios_version": self.rule.min_ios_version,
+            "category": self.rule.category,
+        }
+        
+        # Add behavioral note for fragile patterns
+        if self.rule.category == "fragile" and self.rule.behavioral_note:
+            result["behavioral_note"] = self.rule.behavioral_note
+        
+        return result
+
 
 class SwiftScanner:
     """Scanner for Swift/SwiftUI files."""
 
-    def __init__(self, rules: List[Rule] | None = None):
+    def __init__(self, rules: List[Rule] = None):
         """Initialize scanner with rules."""
         self.rules = rules or get_all_rules()
 
@@ -61,7 +84,7 @@ class SwiftScanner:
         return findings
 
     def scan_directory(
-        self, directory: Path, exclude_patterns: Set[str] | None = None
+        self, directory: Path, exclude_patterns: Set[str] = None
     ) -> List[Finding]:
         """Recursively scan directory for Swift files."""
         exclude_patterns = exclude_patterns or {

@@ -7,6 +7,8 @@ from typing import List
 import click
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
 
 from . import __version__
 from .scanner import SwiftScanner, group_findings_by_file, group_findings_by_rule
@@ -69,14 +71,13 @@ def cli():
     default=False,
     help="Exit with error code if fragile patterns found (default: no)",
 )
-def scan(paths: tuple, json: bool, min_ios: str, severity: str, category: str, group_by: str, exclude: tuple, fail_on_fragile: bool):
+def scan(paths: tuple, format: str, severity: str, category: str, group_by: str, exclude: tuple, fail_on_fragile: bool):
     """Scan Swift/SwiftUI files for deprecated or fragile API usage.
 
     PATHS: One or more files or directories to scan
     """
-    if not json:
-        console.print(f"[dim]swiftui-migrate v{__version__}[/dim]")
-        console.print()
+    console.print(f"[dim]swiftui-migrate v{__version__}[/dim]")
+    console.print()
 
     # Convert paths to Path objects
     scan_paths = [Path(p).resolve() for p in paths]
@@ -86,28 +87,18 @@ def scan(paths: tuple, json: bool, min_ios: str, severity: str, category: str, g
 
     # Configure exclusions
     exclude_patterns = set(exclude) if exclude else None
-    if exclude_patterns and not json:
-        console.print(f"[dim]Excluding: {', '.join(exclude_patterns)}[/dim]\n")
+    if exclude_patterns:
+        console.print(f"[dim]Excluding patterns: {', '.join(exclude_patterns)}[/dim]\n")
 
     # Scan paths
     all_findings = []
-    files_scanned = set()
     for path in scan_paths:
         if path.is_file():
             findings = scanner.scan_file(path)
-            files_scanned.add(path)
         else:
             findings = scanner.scan_directory(path, exclude_patterns)
-            # Track all scanned files
-            for f in findings:
-                files_scanned.add(f.file_path)
         all_findings.extend(findings)
 
-    # Filter by min iOS version
-    if min_ios:
-        min_version = int(min_ios)
-        all_findings = [f for f in all_findings if _extract_ios_version(f.rule.ios_version) >= min_version]
-    
     # Filter by severity
     if severity != "all":
         all_findings = [f for f in all_findings if f.rule.severity == severity]
@@ -146,18 +137,19 @@ def rules():
     """List all available detection rules."""
     all_rules = get_all_rules()
 
-    table = Table(title="SwiftUI Migration Rules", show_header=True, header_style="bold")
-    table.add_column("Rule ID", width=10)
-    table.add_column("Name", width=30)
-    table.add_column("Category", width=12)
+    table = Table(title="SwiftUI Migration Rules", show_header=True, header_style="bold cyan")
+    table.add_column("Rule ID", style="cyan", width=10)
+    table.add_column("Name", style="white", width=30)
+    table.add_column("Severity", width=10)
     table.add_column("iOS Version", width=12)
-    table.add_column("Message")
+    table.add_column("Message", style="dim")
 
     for rule in all_rules:
+        severity_color = "yellow" if rule.severity == "warning" else "red"
         table.add_row(
             rule.id,
             rule.name,
-            rule.category.title(),
+            f"[{severity_color}]{rule.severity.upper()}[/{severity_color}]",
             rule.ios_version,
             rule.message,
         )
