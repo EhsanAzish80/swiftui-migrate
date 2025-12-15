@@ -80,7 +80,12 @@ def cli():
     is_flag=True,
     help="Create .bak backup files before annotating (requires --annotate)",
 )
-def scan(paths: tuple, json: bool, min_ios: str, severity: str, category: str, group_by: str, exclude: tuple, fail_on_fragile: bool, annotate: bool, backup: bool):
+@click.option(
+    "--no-fail",
+    is_flag=True,
+    help="Always exit with code 0, even if issues are found (useful for reporting/analysis)",
+)
+def scan(paths: tuple, json: bool, min_ios: str, severity: str, category: str, group_by: str, exclude: tuple, fail_on_fragile: bool, annotate: bool, backup: bool, no_fail: bool):
     """Scan Swift/SwiftUI files for deprecated or fragile API usage.
 
     PATHS: One or more files or directories to scan
@@ -160,6 +165,10 @@ def scan(paths: tuple, json: bool, min_ios: str, severity: str, category: str, g
         display_text_format(all_findings, group_by, len(files_scanned))
 
     # Exit code logic
+    if no_fail:
+        # Always exit successfully when --no-fail is set
+        sys.exit(0)
+    
     if all_findings:
         # Count deprecated vs fragile
         deprecated_count = sum(1 for f in all_findings if f.rule.category == "deprecated")
