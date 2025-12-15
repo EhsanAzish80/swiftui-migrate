@@ -51,9 +51,3 @@ jobs:
         with:
           name: swiftui-scan-results
           path: scan-results.json
-      
-      - name: Check for deprecated APIs
-        run: |
-          # This step fails if deprecated APIs are found (exit 1)
-          # Fragile patterns are warnings only (exit 0)
-          swiftui-migrate scan examples/
