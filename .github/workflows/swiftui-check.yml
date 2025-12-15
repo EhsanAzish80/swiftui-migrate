@@ -19,12 +19,15 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
       
-      - name: Install swiftui-migrate
+      - name: Install dependencies
         run: pip install click rich
+      
+      - name: Install swiftui-migrate
+        run: pip install -e .
       
       - name: Generate scan report (JSON)
         run: |
-          python -m swiftui_migrate.cli scan Sources/ --json > scan-results.json
+          swiftui-migrate scan examples/ --json > scan-results.json
       
       - name: Extract metrics
         id: metrics
@@ -51,6 +54,6 @@ jobs:
       
       - name: Check for deprecated APIs
         run: |
-          # This step fails if deprecated APIs are found
-          # Fragile patterns won't fail CI (warnings only)
-          python -m swiftui_migrate.cli scan Sources/
+          # This step fails if deprecated APIs are found (exit 1)
+          # Fragile patterns are warnings only (exit 0)
+          swiftui-migrate scan examples/
