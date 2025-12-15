@@ -11,6 +11,7 @@ from rich.table import Table
 from . import __version__
 from .scanner import SwiftScanner, group_findings_by_file, group_findings_by_rule
 from .rules import get_all_rules
+from .annotator import annotate_findings
 
 console = Console()
 
@@ -69,7 +70,17 @@ def cli():
     default=False,
     help="Exit with error code if fragile patterns found (default: no)",
 )
-def scan(paths: tuple, json: bool, min_ios: str, severity: str, category: str, group_by: str, exclude: tuple, fail_on_fragile: bool):
+@click.option(
+    "--annotate",
+    is_flag=True,
+    help="Write inline comments into source files at detected issues (modifies files)",
+)
+@click.option(
+    "--backup",
+    is_flag=True,
+    help="Create .bak backup files before annotating (requires --annotate)",
+)
+def scan(paths: tuple, json: bool, min_ios: str, severity: str, category: str, group_by: str, exclude: tuple, fail_on_fragile: bool, annotate: bool, backup: bool):
     """Scan Swift/SwiftUI files for deprecated or fragile API usage.
 
     PATHS: One or more files or directories to scan
@@ -115,6 +126,32 @@ def scan(paths: tuple, json: bool, min_ios: str, severity: str, category: str, g
     # Filter by category
     if category != "all":
         all_findings = [f for f in all_findings if f.rule.category == category]
+
+    # Handle annotation if requested
+    if annotate:
+        if backup and not json:
+            console.print("[dim]Creating backups before annotation...[/dim]\n")
+        
+        # Validate backup flag usage
+        if backup and not annotate:
+            console.print("[yellow]Warning: --backup has no effect without --annotate[/yellow]\n")
+        
+        # Group findings by file for annotation
+        findings_by_file = group_findings_by_file(all_findings)
+        
+        # Annotate files
+        if not json:
+            console.print("[cyan]Annotating source files...[/cyan]\n")
+        
+        stats = annotate_findings(findings_by_file, backup=backup, console=console)
+        
+        if not json:
+            console.print()
+            console.print(f"[dim]Files modified: {stats['files_modified']}[/dim]")
+            console.print(f"[dim]Files skipped: {stats['files_skipped']}[/dim]")
+            if stats['files_failed'] > 0:
+                console.print(f"[yellow]Files failed: {stats['files_failed']}[/yellow]")
+            console.print()
 
     # Display results
     if json:
